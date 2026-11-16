@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenPages Health Check – Book a conversation</title>
+<style>
+  :root { --ink:#161616; --muted:#525252; --line:#e0e0e0; --bg:#f4f4f4; --blue:#0f62fe; --blue-d:#0043ce; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.5 "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:#161616; color:#fff; padding:28px 24px; }
+  header div, main { max-width:860px; margin:0 auto; }
+  h1 { margin:0 0 4px; font-size:28px; font-weight:400; }
+  header p { margin:0; color:#c6c6c6; }
+  main { padding:24px; }
+  section { background:#fff; border:1px solid var(--line); padding:24px; margin-bottom:16px; }
+  h2 { margin:0 0 12px; font-size:18px; font-weight:600; }
+  .facts { display:flex; gap:24px; flex-wrap:wrap; color:var(--muted); }
+  .day h3 { margin:16px 0 8px; font-size:15px; }
+  .slots { display:flex; flex-wrap:wrap; gap:8px; }
+  .slots button { padding:8px 14px; border:1px solid var(--blue); background:#fff; color:var(--blue); font:inherit; cursor:pointer; }
+  .slots button:hover { background:#edf5ff; }
+  .slots button[aria-pressed="true"] { background:var(--blue); color:#fff; }
+  .slots button:disabled { border-color:var(--line); color:#a8a8a8; background:#f4f4f4; cursor:not-allowed; text-decoration:line-through; }
+  label { display:block; margin:12px 0 4px; font-size:14px; color:var(--muted); }
+  input[type=text], input[type=email], select, textarea { width:100%; padding:10px; border:1px solid #8d8d8d; font:inherit; background:#fff; }
+  .check { display:flex; gap:8px; align-items:center; margin-top:12px; color:var(--ink); }
+  .primary { margin-top:20px; padding:12px 28px; background:var(--blue); color:#fff; border:0; font:inherit; cursor:pointer; }
+  .primary:hover { background:var(--blue-d); }
+  .primary:disabled { background:#c6c6c6; cursor:not-allowed; }
+  #msg { margin-top:12px; font-weight:600; }
+  .err { color:#da1e28; } .ok { color:#198038; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+</style>
+</head>
+<body>
+<header><div>
+  <h1>OpenPages Health Check</h1>
+  <p>Book a 25-minute conversation about “a day in your OpenPages experience”.</p>
+</div></header>
+<main>
+  <section>
+    <h2>About the conversation</h2>
+    <div class="facts">
+      <span><strong>Dates:</strong> December 8 and 9, 2026</span>
+      <span><strong>Length:</strong> 25 minutes, virtual</span>
+      <span><strong>Times shown in:</strong> Eastern Time</span>
+    </div>
+    <p>Your feedback helps us find ways to optimize Scotiabank’s OpenPages platform. Input is collected and reported in aggregate, without attribution, so please be candid. After you book, we will send you a calendar invitation.</p>
+  </section>
+
+  <form id="f" novalidate>
+    <section>
+      <h2>1. Choose a time</h2>
+      <div id="slots" aria-live="polite">Loading available times…</div>
+    </section>
+
+    <section>
+      <h2>2. Your details</h2>
+      <label for="name">Name</label>
+      <input id="name" type="text" maxlength="100" autocomplete="name" required>
+      <label for="email">Work email (used only to send the invitation)</label>
+      <input id="email" type="email" maxlength="254" autocomplete="email" required>
+      <label for="persona">Which best describes your group?</label>
+      <select id="persona" required></select>
+      <div class="check"><input id="senior" type="checkbox"><label for="senior" style="margin:0;color:inherit">I am a senior leader / manager of a team that uses OpenPages</label></div>
+      <label for="notes">Anything you would like us to focus on? (optional)</label>
+      <textarea id="notes" rows="3" maxlength="500"></textarea>
+      <button class="primary" id="go" type="submit" disabled>Book my conversation</button>
+      <div id="msg" role="status"></div>
+    </section>
+  </form>
+</main>
+
+<script>
+// Paste the Apps Script web app URL (ends in /exec) here after deploying Code.gs.
+const API_URL = 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE';
+
+let selected = null;
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function load() {
+  const data = await (await fetch(API_URL)).json();
+  if (!$('persona').options.length) {
+    $('persona').innerHTML = '<option value="">Select…</option>' + data.personas.map(p => `<option>${esc(p)}</option>`).join('');
+  }
+  const byDay = {};
+  data.slots.forEach(s => (byDay[s.day] = byDay[s.day] || []).push(s));
+  $('slots').innerHTML = Object.entries(byDay).map(([day, list]) =>
+    `<div class="day"><h3>${esc(day)}</h3><div class="slots">` +
+    list.map(s => `<button type="button" data-id="${s.id}" aria-pressed="${s.id === selected}" ${s.available ? '' : 'disabled'}>${esc(s.label)}</button>`).join('') +
+    `</div></div>`).join('');
+  document.querySelectorAll('.slots button').forEach(b => b.onclick = () => {
+    selected = b.dataset.id;
+    document.querySelectorAll('.slots button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    $('go').disabled = false;
+  });
+  if (selected && !document.querySelector(`[data-id="${selected}"]:not(:disabled)`)) { selected = null; $('go').disabled = true; }
+}
+
+function fail(text) { $('msg').className = 'err'; $('msg').textContent = text; }
+
+$('f').onsubmit = async e => {
+  e.preventDefault();
+  $('msg').className = ''; $('msg').textContent = '';
+  if (!selected) return fail('Please choose a time.');
+  $('go').disabled = true;
+  try {
+    // text/plain avoids a CORS preflight, which Apps Script does not support.
+    const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ slot:selected, name:$('name').value, email:$('email').value,
+        persona:$('persona').value, senior:$('senior').checked, notes:$('notes').value }) });
+    const data = await res.json();
+    if (data.ok) {
+      $('f').innerHTML = '<section><h2 class="ok">You’re booked.</h2><p>Thank you! We will send a calendar invitation to your email shortly.</p></section>';
+      return;
+    }
+    fail(data.error || 'Something went wrong.');
+  } catch (err) {
+    fail('Could not reach the booking service. Please try again.');
+  }
+  $('go').disabled = false;
+  load().catch(() => {});
+};
+
+load().catch(() => { $('slots').textContent = 'Could not load available times. Please refresh the page.'; });
+</script>
+</body>
+</html>
