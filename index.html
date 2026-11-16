@@ -30,6 +30,10 @@
   .primary:disabled { background:#c6c6c6; cursor:not-allowed; }
   #msg { margin-top:12px; font-weight:600; }
   .err { color:#da1e28; } .ok { color:#198038; }
+  section p { margin:12px 0 0; } section ul, section ol { margin:8px 0 0; padding-left:22px; } section li { margin:4px 0; }
+  .cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin-top:12px; }
+  .cols div { border-left:3px solid var(--blue); padding-left:12px; } .cols strong { display:block; }
+  footer { max-width:860px; margin:0 auto; padding:0 24px 32px; color:var(--muted); font-size:13px; }
   button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
 </style>
 </head>
@@ -47,6 +51,38 @@
       <span><strong>Times shown in:</strong> Eastern Time</span>
     </div>
     <p>Your feedback helps us find ways to optimize Scotiabank’s OpenPages platform. Input is collected and reported in aggregate, without attribution, so please be candid. After you book, we will send you a calendar invitation.</p>
+  </section>
+
+  <section>
+    <h2>What to expect</h2>
+    <div class="cols">
+      <div><strong>A short, relaxed chat</strong>A 25-minute virtual conversation about a typical day in your OpenPages experience: what works well, what slows you down, and what you would change. No preparation is needed.</div>
+      <div><strong>Led by an OpenPages expert</strong>Nelson Pinochet, IBM’s OpenPages subject matter expert, will lead the conversation. He works with many global enterprise clients and brings a wider practitioner perspective.</div>
+      <div><strong>Candid and anonymous</strong>Comments are not attributed to individuals. Everything is distilled into an executive report that highlights opportunities to optimize Scotiabank’s existing platform.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Who should book</h2>
+    <p>We are looking for a broad cross-section of OpenPages users, not only the compliance team. All of these perspectives are welcome:</p>
+    <ul>
+      <li>Everyday users, such as analysts and risk or compliance officers</li>
+      <li>Administrators and report authors</li>
+      <li>Business and technology owners</li>
+      <li>Senior leaders and managers of teams that use OpenPages</li>
+    </ul>
+    <p>If you use OpenPages in any capacity, we would value your input.</p>
+  </section>
+
+  <section>
+    <h2>How booking works</h2>
+    <ol>
+      <li>Pick an open 25-minute time on December 8 or 9 below.</li>
+      <li>Enter your details and tell us which group you belong to.</li>
+      <li>Submit. Your time is held for you straight away.</li>
+      <li>You will receive a calendar invitation from the IBM team with the meeting link.</li>
+    </ol>
+    <p>Only one person can book each time slot. If you need to change or cancel, reply to your calendar invitation and we will free up your slot.</p>
   </section>
 
   <form id="f" novalidate>
@@ -71,6 +107,7 @@
     </section>
   </form>
 </main>
+<footer>Your name and email are used only to schedule your conversation and are not included in the report. All times are Eastern Time.</footer>
 
 <script>
 // Apps Script web app URL (deployed from Code.gs).
