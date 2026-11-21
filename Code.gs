@@ -1,6 +1,7 @@
 /**
- * OpenPages Health Check - booking backend (Google Apps Script, bound to a Google Sheet).
- * Bookings are stored in the sheet tab "Bookings". See README.md for setup.
+ * OpenPages Health Check - booking backend (Google Apps Script web app).
+ * Bookings are stored as items on a monday.com board. The monday API token lives in
+ * Script Properties (key MONDAY_TOKEN), never in the page or this file. See README.md.
  */
 var CONFIG = {
   TZ: 'America/Toronto',
@@ -14,7 +15,9 @@ var CONFIG = {
   PERSONAS: ['Compliance / Regulatory', 'Operational Risk', 'Internal Audit',
              'Business line / First line', 'Technology / Platform owner',
              'Executive / Senior leader', 'Other'],
-  SHEET: 'Bookings'
+  BOARD_ID: 18441012480,
+  COL: { slot: 'text_mm9abnjp', email: 'email_mm9ajq84', group: 'text_mm9agxd5',
+         senior: 'boolean_mm9a7d2e', notes: 'long_text_mm9apefk' }
 };
 var EMAIL_RE = /^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{2,}$/;
 
@@ -36,36 +39,43 @@ function slotDate_(id) {
   return Utilities.parseDate(id, CONFIG.TZ, "yyyy-MM-dd'T'HH:mm");
 }
 
-function sheet_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sh = ss.getSheetByName(CONFIG.SHEET);
-  if (!sh) {
-    sh = ss.insertSheet(CONFIG.SHEET);
-    sh.appendRow(['Created', 'Slot (ET)', 'Name', 'Email', 'Group', 'Senior', 'Notes']);
-    sh.setFrozenRows(1);
-  }
-  return sh;
+function monday_(query, variables) {
+  var token = PropertiesService.getScriptProperties().getProperty('MONDAY_TOKEN');
+  if (!token) throw new Error('MONDAY_TOKEN not set');
+  var res = UrlFetchApp.fetch('https://api.monday.com/v2', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: token, 'API-Version': '2025-10' },
+    payload: JSON.stringify({ query: query, variables: variables || {} }),
+    muteHttpExceptions: true
+  });
+  var body = JSON.parse(res.getContentText());
+  if (res.getResponseCode() !== 200 || body.errors) throw new Error('monday API error');
+  return body.data;
 }
 
-// Slot ids are in column B. Stored as plain text (see safe_), so they compare as strings.
-function takenSlots_() {
-  var sh = sheet_(), last = sh.getLastRow();
-  if (last < 2) return [];
-  return sh.getRange(2, 2, last - 1, 1).getValues().map(function (r) { return String(r[0]); });
+// Returns [{slot, email}] for every booking on the board.
+function bookings_() {
+  var d = monday_('query($b:[ID!]){boards(ids:$b){items_page(limit:500){items{column_values(ids:["' +
+    CONFIG.COL.slot + '","' + CONFIG.COL.email + '"]){id text}}}}}', { b: [String(CONFIG.BOARD_ID)] });
+  return d.boards[0].items_page.items.map(function (it) {
+    var o = { slot: '', email: '' };
+    it.column_values.forEach(function (c) {
+      if (c.id === CONFIG.COL.slot) o.slot = String(c.text || '');
+      if (c.id === CONFIG.COL.email) o.email = String(c.text || '').toLowerCase();
+    });
+    return o;
+  });
 }
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-// Prevent spreadsheet formula injection and force text storage.
-function safe_(v) {
-  v = String(v);
-  return /^[=+\-@\t\r]/.test(v) ? "'" + v : v;
-}
-
 function doGet() {
-  var taken = takenSlots_();
+  var taken;
+  try { taken = bookings_().map(function (b) { return b.slot; }); }
+  catch (err) { return json_({ ok: false, error: 'Booking service unavailable.' }); }
   var now = new Date();
   var slots = allSlots_().map(function (id) {
     var d = slotDate_(id);
@@ -106,21 +116,23 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var sh = sheet_();
-    if (takenSlots_().indexOf(slot) !== -1) {
+    var existing = bookings_();
+    if (existing.some(function (b) { return b.slot === slot; })) {
       return json_({ ok: false, error: 'Sorry, that slot was just taken. Please pick another.' });
     }
-    var last = sh.getLastRow();
-    var emails = last < 2 ? [] : sh.getRange(2, 4, last - 1, 1).getValues()
-      .map(function (r) { return String(r[0]).toLowerCase(); });
-    if (emails.indexOf(email.toLowerCase()) !== -1) {
+    if (existing.some(function (b) { return b.email === email.toLowerCase(); })) {
       return json_({ ok: false, error: 'You already have a booking with this email.' });
     }
-    var row = sh.getLastRow() + 1;
-    sh.getRange(row, 1, 1, 7).setNumberFormat('@').setValues([[
-      new Date().toISOString(), slot, safe_(name), safe_(email), persona, p.senior ? 'Yes' : '', safe_(notes)
-    ]]);
-    SpreadsheetApp.flush();
+    var cols = {};
+    cols[CONFIG.COL.slot] = slot;
+    cols[CONFIG.COL.email] = { email: email, text: email };
+    cols[CONFIG.COL.group] = persona;
+    if (p.senior) cols[CONFIG.COL.senior] = { checked: 'true' };
+    if (notes) cols[CONFIG.COL.notes] = { text: notes };
+    monday_('mutation($b:ID!,$n:String!,$c:JSON!){create_item(board_id:$b,item_name:$n,column_values:$c){id}}',
+      { b: String(CONFIG.BOARD_ID), n: name, c: JSON.stringify(cols) });
+  } catch (err) {
+    return json_({ ok: false, error: 'Could not save your booking. Please try again.' });
   } finally {
     lock.releaseLock();
   }
